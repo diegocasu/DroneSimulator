@@ -1,5 +1,6 @@
 from simulator.DroneSimulator import DroneSimulator
 import numpy as np
+import time
 
 drone_simulator = DroneSimulator(bitmap = './test-very-little.bmp',
     batch_size = 1,
@@ -12,7 +13,8 @@ drone_simulator = DroneSimulator(bitmap = './test-very-little.bmp',
     max_steps = 6,
     render = True)
 
-drone_simulator.render()
+
+drone_simulator.render(render=True)
 
 # first batch dimension, drone_dimension, action_dimension
 drone_simulator.step(np.ones((1, 1, 4)))
