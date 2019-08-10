@@ -24,11 +24,13 @@ def getColour(i):
 
 class DroneSimulator:
 
-    def __init__(self, bitmap, batch_size, observation_range, amount_of_drones, stigmation_evaporation_speed, inertia,
-                 collision_detection, max_steps, render_allowed=False, drone_colour=[255, 255, 255]):
+    def __init__(self, bitmap, batch_size, observation_range, drone_size, amount_of_drones,
+                 stigmation_evaporation_speed, inertia, collision_detection, max_steps,
+                 render_allowed=False, drone_colour=[255, 255, 255]):
 
-        self.__init_simulator_parameters(bitmap, batch_size, observation_range, amount_of_drones, stigmation_evaporation_speed,
-                                         inertia, collision_detection, max_steps, render_allowed, drone_colour)
+        self.__init_simulator_parameters(bitmap, batch_size, observation_range, drone_size, amount_of_drones,
+                                         stigmation_evaporation_speed, inertia, collision_detection, max_steps,
+                                         render_allowed, drone_colour)
 
         self.__init_environment_parameters()
         self.__parse_bitmap()
@@ -38,12 +40,14 @@ class DroneSimulator:
 
         self.__init_render_parameters()
 
-    def __init_simulator_parameters(self, bitmap, batch_size, observation_range, amount_of_drones, stigmation_evaporation_speed,
-                                    inertia, collision_detection, max_steps, render_allowed, drone_colour):
+    def __init_simulator_parameters(self, bitmap, batch_size, observation_range, drone_size, amount_of_drones,
+                                    stigmation_evaporation_speed, inertia, collision_detection, max_steps,
+                                    render_allowed, drone_colour):
 
         self.__bitmap = bitmap
         self.__batch_size = batch_size
         self.__observation_range = observation_range
+        self.__drone_size = drone_size
         self.__amount_of_drones = amount_of_drones
         self.__stigmation_evaporation_speed = stigmation_evaporation_speed  # TODO: non viene utilizzato per ora
         self.__inertia = inertia
@@ -127,14 +131,11 @@ class DroneSimulator:
         for batchIndex in range(self.__batch_size):
             droneIndex = 0
             while droneIndex < len(self.__drones_position[batchIndex]):
-                drone_level = np.zeros((self.__targets.shape[0], self.__targets.shape[1]))
-                self.__drones_position[batchIndex][droneIndex] = np.asarray([random.randint(0, self.__targets.shape[0] - 1),
-                                                                             random.randint(0, self.__targets.shape[1] - 1)])
-
-                drone_level[self.__drones_position[batchIndex][droneIndex][0] - 1: self.__drones_position[batchIndex][droneIndex][0] + 2,
-                            self.__drones_position[batchIndex][droneIndex][1] - 1: self.__drones_position[batchIndex][droneIndex][1] + 2] = 1
-
-                self.__drawn_drones[batchIndex][droneIndex] = drone_level
+                self.__drones_position[batchIndex][droneIndex] = np.asarray([
+                    random.randint(0, self.__targets.shape[0] - 1),
+                    random.randint(0, self.__targets.shape[1] - 1)
+                ])
+                self.__drawn_drones[batchIndex][droneIndex] = self.__draw_drone_in_level(batchIndex, droneIndex)
 
                 # A drone is correctly positioned if it's rendered completely inside the map and
                 # it doesn't collides with environment or other drones
@@ -142,6 +143,17 @@ class DroneSimulator:
                     droneIndex += 1
 
         self.__drones_position_float = np.copy(self.__drones_position).astype(float)
+
+    def __draw_drone_in_level(self, batchIndex, droneIndex):
+        # The drone it's displayed as a square of side equals to self.__drone_size
+        drone_level = np.zeros((self.__targets.shape[0], self.__targets.shape[1]))
+        position_axis0 = self.__drones_position[batchIndex][droneIndex][0]
+        position_axis1 = self.__drones_position[batchIndex][droneIndex][1]
+
+        drone_level[position_axis0 - self.__drone_size: position_axis0 + self.__drone_size + 1,
+                    position_axis1 - self.__drone_size: position_axis1 + self.__drone_size + 1] = 1
+
+        return drone_level
 
     def __detect_collision(self, batchIndex):
         collision_level = self.__collision[np.newaxis, ...]
@@ -154,14 +166,15 @@ class DroneSimulator:
         return False
 
     def __out_of_map(self, batchIndex, droneIndex):
-        # The drone for now it's a simple 3x3 square (this explains the +2 margin used in the check)
+        position_axis0 = self.__drones_position[batchIndex][droneIndex][0]
+        position_axis1 = self.__drones_position[batchIndex][droneIndex][1]
 
-        if (self.__drones_position[batchIndex][droneIndex][0] - 1 < 0 or
-                self.__drones_position[batchIndex][droneIndex][0] + 2 > self.__targets.shape[0]):
+        if (position_axis0 - self.__drone_size < 0 or
+                position_axis0 + self.__drone_size + 1 > self.__targets.shape[0]):
             return True
 
-        if (self.__drones_position[batchIndex][droneIndex][1] - 1 < 0 or
-                self.__drones_position[batchIndex][droneIndex][1] + 2 > self.__targets.shape[0]):
+        if (position_axis1 - self.__drone_size < 0 or
+                position_axis1 + self.__drone_size + 1 > self.__targets.shape[1]):
             return True
 
         return False
@@ -170,7 +183,10 @@ class DroneSimulator:
         self.__image = np.full((self.__targets.shape[0], self.__targets.shape[1], 3), 0)
         self.__image_semaphore = None
 
-        if self.__batch_size == 1 and self.__render_allowed:
+        if self.__render_allowed:
+            if self.__batch_size > 1:
+                raise Exception("Render is allowed only when batch_size is equal to 1")
+
             self.__image_semaphore = threading.Lock()
             rendering = threading.Thread(target=self.__init_render)
             rendering.start()
@@ -182,7 +198,7 @@ class DroneSimulator:
         # Create window with GraphicsView widget
         w = pg.GraphicsView()
         w.show()
-        w.showMaximized()  #w.resize(self.__targets.shape[0], self.__targets.shape[1])
+        w.showMaximized()  #w.resize(self.__targets.shape[0], self.__targets.shape[1]) #TODO remove resize
         w.setWindowTitle('Drone simulator')
 
         view = pg.ViewBox()
@@ -198,21 +214,23 @@ class DroneSimulator:
         view.addItem(img)
 
         # Start Qt event loop unless running in interactive mode or using pyside.
-        QtGui.QApplication.instance().exec_()
-
-
-
-
+        QtGui.QApplication.instance().exec_()  #
 
     def render(self):
-        if self.__batch_size > 1 and self.__render_allowed:
-            raise Exception("Render is allowed only when batch_size is equal to 1")
+        if self.__render_allowed:
+            environment = np.copy(self.__environment_bitmap)
+            drones = np.sum(self.__drawn_drones[0], axis=0)
 
-        drones = np.sum(self.__drawn_drones[0], axis=0)
-        self.__environment_bitmap[drones == 1, :] = self.__environment_bitmap[drones == 1, :] + self.__drone_colour
-        self.__image_semaphore.acquire()
-        np.copyto(self.__image, self.__environment_bitmap)
-        self.__image_semaphore.release()
+            environment[drones == 1, :] = environment[drones == 1, :] + self.__drone_colour
+
+            self.__image_semaphore.acquire()
+            np.copyto(self.__image, environment)
+            self.__image_semaphore.release()
+
+    def reset(self):
+        #TODO da completare
+        self.__init_drones_parameters()
+        self.__init_drones()
 
     '''
     def step(self, actions):

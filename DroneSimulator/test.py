@@ -1,11 +1,11 @@
 from simulator.DroneSimulator import DroneSimulator
 import numpy as np
-import time
 
 drone_simulator = DroneSimulator(
     bitmap = './test-with-2-levels.bmp',
     batch_size = 1,
     observation_range = 2,
+    drone_size = 1,
     amount_of_drones = 3,
     stigmation_evaporation_speed = np.array([1, 2, 3]),
     inertia = 0.3,
@@ -13,7 +13,6 @@ drone_simulator = DroneSimulator(
     max_steps = 6,
     render_allowed = True
 )
-
 
 drone_simulator.render()
 
