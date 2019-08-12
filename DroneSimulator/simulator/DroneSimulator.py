@@ -25,12 +25,12 @@ def getColour(i):
 class DroneSimulator:
 
     def __init__(self, bitmap, batch_size, observation_range, drone_size, amount_of_drones,
-                 stigmation_evaporation_speed, inertia, collision_detection, max_steps,
+                 stigmergy_evaporation_speed, stigmergy_colours, inertia, collision_detection, max_steps,
                  render_allowed=False, drone_colour=[255, 255, 255]):
 
         self.__init_simulator_parameters(bitmap, batch_size, observation_range, drone_size, amount_of_drones,
-                                         stigmation_evaporation_speed, inertia, collision_detection, max_steps,
-                                         render_allowed, drone_colour)
+                                         stigmergy_evaporation_speed, stigmergy_colours, inertia, collision_detection,
+                                         max_steps, render_allowed, drone_colour)
 
         self.__init_environment_parameters()
         self.__parse_bitmap()
@@ -38,18 +38,20 @@ class DroneSimulator:
         self.__init_drones_parameters()
         self.__init_drones()
 
+        self.__init_stigmergy_space()
         self.__init_render_parameters()
 
     def __init_simulator_parameters(self, bitmap, batch_size, observation_range, drone_size, amount_of_drones,
-                                    stigmation_evaporation_speed, inertia, collision_detection, max_steps,
-                                    render_allowed, drone_colour):
+                                    stigmergy_evaporation_speed, stigmergy_colours, inertia, collision_detection,
+                                    max_steps, render_allowed, drone_colour):
 
         self.__bitmap = bitmap
         self.__batch_size = batch_size
         self.__observation_range = observation_range
         self.__drone_size = drone_size
         self.__amount_of_drones = amount_of_drones
-        self.__stigmation_evaporation_speed = stigmation_evaporation_speed  # TODO: non viene utilizzato per ora
+        self.__stigmergy_evaporation_speed = stigmergy_evaporation_speed
+        self.__stigmergy_colours = stigmergy_colours
         self.__inertia = inertia
         self.__collision_detection = collision_detection
         self.__max_steps = max_steps
@@ -111,16 +113,16 @@ class DroneSimulator:
         self.__drones_velocity = np.zeros((self.__amount_of_drones, 2))
         self.__drawn_drones = np.zeros((self.__amount_of_drones, self.__targets.shape[0], self.__targets.shape[1]))
 
-        self.__stigmergy_space = np.zeros((self.__stigmation_evaporation_speed.shape[0], self.__targets.shape[0],
-                                           self.__targets.shape[1]))  # TODO: Non viene utilizzato per ora
-        self.__stigmergy_colours = np.array([])  # TODO: Non viene utilizzato per ora
-
-        # The batch dimension will be added only for stigmergy_space and drones' attributes, because
-        # they are the only two levels that can change between different parallel simulations.
-        self.__stigmergy_space = self.__add_batch_dimension(self.__stigmergy_space)
         self.__drones_velocity = self.__add_batch_dimension(self.__drones_velocity)
         self.__drones_position = self.__add_batch_dimension(self.__drones_position)
         self.__drawn_drones = self.__add_batch_dimension(self.__drawn_drones)
+
+    def __init_stigmergy_space(self):
+        self.__stigmergy_space = np.zeros((self.__stigmergy_evaporation_speed.shape[0],
+                                           self.__targets.shape[0],
+                                           self.__targets.shape[1]))
+
+        self.__stigmergy_space = self.__add_batch_dimension(self.__stigmergy_space)
 
     def __add_batch_dimension(self, matrix):
         matrix = matrix[np.newaxis, ...]
@@ -198,7 +200,7 @@ class DroneSimulator:
         # Create window with GraphicsView widget
         w = pg.GraphicsView()
         w.show()
-        w.showMaximized()  #w.resize(self.__targets.shape[0], self.__targets.shape[1]) #TODO remove resize
+        w.showMaximized()
         w.setWindowTitle('Drone simulator')
 
         view = pg.ViewBox()
@@ -220,8 +222,13 @@ class DroneSimulator:
         if self.__render_allowed:
             environment = np.copy(self.__environment_bitmap)
             drones = np.sum(self.__drawn_drones[0], axis=0)
+            stigmergy_space = self.__stigmergy_space[0]
 
             environment[drones == 1, :] = environment[drones == 1, :] + self.__drone_colour
+
+            for index in range(stigmergy_space.shape[0]):
+                environment[stigmergy_space[index] == 1, :] = (environment[stigmergy_space[index] == 1, :] +
+                                                               self.__stigmergy_colours[index])
 
             self.__image_semaphore.acquire()
             np.copyto(self.__image, environment)
@@ -231,35 +238,4 @@ class DroneSimulator:
         #TODO da completare
         self.__init_drones_parameters()
         self.__init_drones()
-
-    '''
-    def step(self, actions):
-        self.__drones_velocity = actions[:, :, 0:2] * self.__inertia + (1 - self.__inertia) * self.__drones_velocity
-        # with t = 1
-        self.__drones_position_float = self.__drones_position_float + self.__drones_velocity
-        self.__drones_position = np.copy(self.__drones_position_float).astype(int)
-        self.__render()
-        observations = []
-        for index, drones in enumerate(self.__drawn_drones):
-            observations.append(self.__get_observation(drones, index))
-
-    def __get_observation(self, drones, batchIndex):
-        drones_observation = []
-        for droneIndex in range(len(drones)):
-            # all drones except the one we are working with
-            other_drones = [drone for index, drone in enumerate(drones) if index != droneIndex]
-            drone_observation = np.array(other_drones)
-            drone_position = self.__drones_position[batchIndex][droneIndex]
-            drone_observation = drone_observation[:,
-                                drone_position[0] - self.__observation_range:
-                                drone_position[0] + self.__observation_range + 1,
-                                drone_position[1] - self.__observation_range:
-                                drone_position[1] + self.__observation_range + 1
-                                ]
-            print(drone_position)
-            print(drone_observation)
-
-        print("stop")
-        exit()
-
-    '''
+        self.__init_stigmergy_space()
