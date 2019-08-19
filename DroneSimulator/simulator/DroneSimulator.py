@@ -244,57 +244,6 @@ class DroneSimulator:
         # Start Qt event loop unless running in interactive mode or using pyside.
         QtGui.QApplication.instance().exec_()  #
 
-    def render(self):
-        if self.__render_allowed:
-            environment = np.copy(self.__environment_bitmap)
-            drones = np.sum(self.__drawn_drones[0], axis=0)
-            stigmergy_space = self.__stigmergy_space[0]
-
-            environment[drones == 1, :] = environment[drones == 1, :] + self.__drone_colour
-
-            for index in range(stigmergy_space.shape[0]):
-                environment[stigmergy_space[index] > 0, :] += self.__stigmergy_colours[index]
-
-            self.__image_semaphore.acquire()
-            np.copyto(self.__image, environment)
-            self.__image_semaphore.release()
-
-    def reset(self):
-        observation_dimension = 2 * (self.__drone_size + self.__observation_range) + 1
-        observations_table = np.zeros((self.__batch_size, self.__amount_of_drones,
-                                       observation_dimension, observation_dimension))
-
-        self.__init_drones_parameters()
-        self.__init_drones()
-        self.__init_stigmergy_space()
-
-        # Initial observation
-        for batch_index in range(self.__batch_size):
-            for drone_index in range(self.__amount_of_drones):
-                observations_table[batch_index][drone_index] = self.__get_observation(batch_index, drone_index)
-
-        return observations_table
-
-    def step(self, drones_actions, stigmergy_actions):
-        observation_dimension = 2*(self.__drone_size + self.__observation_range) + 1
-        observations_table = np.zeros((self.__batch_size, self.__amount_of_drones,
-                                       observation_dimension, observation_dimension))
-
-        rewards_table = np.zeros((self.__batch_size, self.__amount_of_drones, 1))
-
-        self.__current_steps += 1
-        if self.__current_steps > self.__max_steps:
-            return None, 0, True, "Maximum number of steps reached"
-
-        self.__stigmergy_evaporation()
-        self.__update_stigmergy_space(stigmergy_actions)
-
-        self.__drones_actions_conversion(drones_actions)
-        self.__update_drones(drones_actions, rewards_table, observations_table)
-
-        # Calcolo info con JSON
-        # Restituire observation,reward, done, info (in questo ordine)
-
     def __drones_actions_conversion(self, drones_actions):
         for index in range(self.__batch_size):
             np.apply_along_axis(self.__swap_axis, 1, drones_actions[index])
@@ -438,3 +387,64 @@ class DroneSimulator:
                               constant_values=(-1))
 
         return enlarged_map, position_axis_0 + enlargement_axis_before_0, position_axis_1 + enlargement_axis_before_1
+
+    def __environment_info(self):
+        info = {
+            "Drones position - float": self.__drones_position_float,
+            "Drones position": self.__drones_position,
+            "Drones velocity": self.__drones_velocity,
+            "Targets achieved": self.__targets_achieved,
+            "Stigmergy Space":  self.__stigmergy_space
+        }
+
+        return info
+
+    def render(self):
+        if self.__render_allowed:
+            environment = np.copy(self.__environment_bitmap)
+            drones = np.sum(self.__drawn_drones[0], axis=0)
+            stigmergy_space = self.__stigmergy_space[0]
+
+            environment[drones == 1, :] = environment[drones == 1, :] + self.__drone_colour
+
+            for index in range(stigmergy_space.shape[0]):
+                environment[stigmergy_space[index] > 0, :] += self.__stigmergy_colours[index]
+
+            self.__image_semaphore.acquire()
+            np.copyto(self.__image, environment)
+            self.__image_semaphore.release()
+
+    def reset(self):
+        observation_dimension = 2 * (self.__drone_size + self.__observation_range) + 1
+        observations_table = np.zeros((self.__batch_size, self.__amount_of_drones,
+                                       observation_dimension, observation_dimension))
+
+        self.__init_drones_parameters()
+        self.__init_drones()
+        self.__init_stigmergy_space()
+
+        # Initial observation
+        for batch_index in range(self.__batch_size):
+            for drone_index in range(self.__amount_of_drones):
+                observations_table[batch_index][drone_index] = self.__get_observation(batch_index, drone_index)
+
+        return observations_table
+
+    def step(self, drones_actions, stigmergy_actions):
+        observation_dimension = 2*(self.__drone_size + self.__observation_range) + 1
+        observations_table = np.zeros((self.__batch_size, self.__amount_of_drones,
+                                       observation_dimension, observation_dimension))
+
+        rewards_table = np.zeros((self.__batch_size, self.__amount_of_drones, 1))
+
+        self.__current_steps += 1
+        if self.__current_steps > self.__max_steps:
+            return None, 0, True, "Maximum number of steps reached"
+
+        self.__stigmergy_evaporation()
+        self.__update_stigmergy_space(stigmergy_actions)
+
+        self.__drones_actions_conversion(drones_actions)
+        self.__update_drones(drones_actions, rewards_table, observations_table)
+
+        return observations_table, rewards_table, False, self.__environment_info()
