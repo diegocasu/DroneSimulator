@@ -9,6 +9,7 @@ import threading
 
 np.set_printoptions(threshold=sys.maxsize)
 pg.setConfigOptions(imageAxisOrder='row-major')
+pg.setConfigOption('background', 'w')
 
 
 class DroneSimulator:
@@ -131,7 +132,7 @@ class DroneSimulator:
         for batch_index in range(self.__batch_size):
             drone_index = 0
             while drone_index < len(self.__drones_position[batch_index]):
-                self.__drones_position[batch_index][drone_index] = np.asarray([
+                self.__drones_position[batch_index, drone_index] = np.asarray([
                     random.randint(0, self.__targets.shape[0] - 1),
                     random.randint(0, self.__targets.shape[1] - 1)
                 ])
@@ -147,13 +148,13 @@ class DroneSimulator:
 
     def __draw_drone(self, batch_index, drone_index):
         radius = self.__drone_size
-        position_axis_0 = self.__drones_position[batch_index][drone_index][0]
-        position_axis_1 = self.__drones_position[batch_index][drone_index][1]
+        position_axis_0 = self.__drones_position[batch_index, drone_index, 0]
+        position_axis_1 = self.__drones_position[batch_index, drone_index, 1]
         interval_axis_0, interval_axis_1 = self.__drawing_boundaries(position_axis_0, position_axis_1, radius)
 
         drone_level = np.zeros((self.__targets.shape[0], self.__targets.shape[1]))
         drone_level[interval_axis_0, interval_axis_1] = 1
-        self.__drawn_drones[batch_index][drone_index] = drone_level
+        self.__drawn_drones[batch_index, drone_index] = drone_level
 
     def __drawing_boundaries(self, position_axis_0, position_axis_1, radius):
         start_point_axis_0 = position_axis_0 - radius
@@ -194,8 +195,8 @@ class DroneSimulator:
         return False
 
     def __out_of_map(self, batch_index, drone_index, radius):
-        position_axis_0 = self.__drones_position[batch_index][drone_index][0]
-        position_axis_1 = self.__drones_position[batch_index][drone_index][1]
+        position_axis_0 = self.__drones_position[batch_index, drone_index, 0]
+        position_axis_1 = self.__drones_position[batch_index, drone_index, 1]
 
         if (position_axis_0 - radius < 0 or position_axis_0 - radius >= self.__targets.shape[0] or
                 position_axis_0 + radius < 0 or position_axis_0 + radius >= self.__targets.shape[0]):
@@ -238,11 +239,24 @@ class DroneSimulator:
 
         # Create image item
         img = pg.ImageItem(self.__image)
-        self.__image_semaphore.release()
         view.addItem(img)
+        self.__image_semaphore.release()
+
+        timer = QtCore.QTimer()
+        timer.timeout.connect(lambda: self.__update_simulator_view(view))
+        timer.start(100)
 
         # Start Qt event loop unless running in interactive mode or using pyside.
-        QtGui.QApplication.instance().exec_()  #
+        app.instance().exec()
+
+    def __update_simulator_view(self, view):
+        self.__image_semaphore.acquire()
+
+        view.clear()
+        img = pg.ImageItem(self.__image)
+        view.addItem(img)
+
+        self.__image_semaphore.release()
 
     def __drones_actions_conversion(self, drones_actions):
         for index in range(self.__batch_size):
@@ -269,15 +283,16 @@ class DroneSimulator:
     def __update_stigmergy_space(self, stigmergy_actions):
         for batch_index in range(self.__batch_size):
             for drone_index in range(self.__amount_of_drones):
-                position_axis_0 = self.__drones_position[batch_index][drone_index][0]
-                position_axis_1 = self.__drones_position[batch_index][drone_index][1]
-                stig_level = int(stigmergy_actions[batch_index][drone_index][0])
-                stig_radius = int(stigmergy_actions[batch_index][drone_index][1])
+                position_axis_0 = self.__drones_position[batch_index, drone_index, 0]
+                position_axis_1 = self.__drones_position[batch_index, drone_index, 1]
+                stig_level = int(stigmergy_actions[batch_index, drone_index, 0])
+                stig_radius = int(stigmergy_actions[batch_index, drone_index, 1])
 
                 if stig_level == -1:  # No pheromone release
                     continue
 
-                interval_axis_0, interval_axis_1 = self.__drawing_boundaries(position_axis_0, position_axis_1,
+                interval_axis_0, interval_axis_1 = self.__drawing_boundaries(position_axis_0,
+                                                                             position_axis_1,
                                                                              stig_radius)
 
                 # 100 is the intensity of the pheromone released.
@@ -291,32 +306,32 @@ class DroneSimulator:
                 self.__update_position(batch_index, drone_index)
                 self.__draw_drone(batch_index, drone_index)
                 self.__target_achieved(batch_index, drone_index)
-                rewards_table[batch_index][drone_index] = self.__reward(batch_index, drone_index)
-                observations_table[batch_index][drone_index] = self.__get_observation(batch_index, drone_index)
+                rewards_table[batch_index, drone_index] = self.__reward(batch_index, drone_index)
+                observations_table[batch_index, drone_index] = self.__get_observation(batch_index, drone_index)
 
     def __update_velocity(self, batch_index, drone_index, drones_actions):
-        drone_velocity = self.__drones_velocity[batch_index][drone_index]
-        drone_command = drones_actions[batch_index][drone_index]
+        drone_velocity = self.__drones_velocity[batch_index, drone_index]
+        drone_command = drones_actions[batch_index, drone_index]
 
-        self.__drones_velocity[batch_index][drone_index] = (drone_velocity * self.__inertia +
+        self.__drones_velocity[batch_index, drone_index] = (drone_velocity * self.__inertia +
                                                             drone_command * (1 - self.__inertia))
 
     def __update_position(self, batch_index, drone_index):
-        drone_position = self.__drones_position_float[batch_index][drone_index]
-        drone_velocity = self.__drones_velocity[batch_index][drone_index]
+        drone_position = self.__drones_position_float[batch_index, drone_index]
+        drone_velocity = self.__drones_velocity[batch_index, drone_index]
         t_constant = 1
 
-        self.__drones_position_float[batch_index][drone_index] = drone_position + drone_velocity * t_constant
+        self.__drones_position_float[batch_index, drone_index] = drone_position + drone_velocity * t_constant
         self.__drones_position = np.copy(self.__drones_position_float).astype(int)
 
     def __target_achieved(self, batch_index, drone_index):
-        target_collision = self.__drawn_drones[batch_index][drone_index] + self.__targets
+        target_collision = self.__drawn_drones[batch_index, drone_index] + self.__targets
         self.__targets_achieved[batch_index][drone_index][target_collision > 1] = 1
 
     def __reward(self, batch_index, drone_index):
         average_distance = self.__average_distance_to_targets(batch_index, drone_index)
         alpha = np.sqrt(np.sum(np.power(self.__targets.shape, 2)))
-        num_target_achieved = np.count_nonzero(self.__targets_achieved[batch_index][drone_index])
+        num_target_achieved = np.count_nonzero(self.__targets_achieved[batch_index, drone_index])
 
         reward_score = 1 / average_distance + alpha * num_target_achieved
 
@@ -329,13 +344,13 @@ class DroneSimulator:
         return reward_score
 
     def __average_distance_to_targets(self, batch_index, drone_index):
-        targets_not_achieved = self.__targets + self.__targets_achieved[batch_index][drone_index]
+        targets_not_achieved = self.__targets + self.__targets_achieved[batch_index, drone_index]
         targets_not_achieved[targets_not_achieved > 1] = 0
         average_distance = 1
 
         if np.any(targets_not_achieved):
             targets_positions = np.array(list(zip(*np.nonzero(targets_not_achieved))))
-            drone_position = np.repeat(self.__drones_position[batch_index][drone_index].reshape(1, 2),
+            drone_position = np.repeat(self.__drones_position[batch_index, drone_index].reshape(1, 2),
                                        targets_positions.shape[0], 0)
 
             average_distance = np.average(
@@ -344,8 +359,8 @@ class DroneSimulator:
         return average_distance
 
     def __get_observation(self, batch_index, drone_index):
-        position_axis_0 = self.__drones_position[batch_index][drone_index][0]
-        position_axis_1 = self.__drones_position[batch_index][drone_index][1]
+        position_axis_0 = self.__drones_position[batch_index, drone_index, 0]
+        position_axis_1 = self.__drones_position[batch_index, drone_index, 1]
         observation_radius = self.__drone_size + self.__observation_range
 
         drones = np.sum(self.__drawn_drones[batch_index], axis=0)
@@ -426,7 +441,7 @@ class DroneSimulator:
         # Initial observation
         for batch_index in range(self.__batch_size):
             for drone_index in range(self.__amount_of_drones):
-                observations_table[batch_index][drone_index] = self.__get_observation(batch_index, drone_index)
+                observations_table[batch_index, drone_index] = self.__get_observation(batch_index, drone_index)
 
         return observations_table
 
@@ -444,7 +459,9 @@ class DroneSimulator:
         self.__stigmergy_evaporation()
         self.__update_stigmergy_space(stigmergy_actions)
 
-        self.__drones_actions_conversion(drones_actions)
-        self.__update_drones(drones_actions, rewards_table, observations_table)
+        # Using a copy, the conversion doesn't affect the original array of actions
+        drones_actions_copy = np.copy(drones_actions)
+        self.__drones_actions_conversion(drones_actions_copy)
+        self.__update_drones(drones_actions_copy, rewards_table, observations_table)
 
         return observations_table, rewards_table, False, self.__environment_info()
