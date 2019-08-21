@@ -14,11 +14,11 @@ pg.setConfigOption('background', 'w')
 
 class DroneSimulator:
 
-    def __init__(self, bitmap, batch_size, observation_range, drone_size, amount_of_drones,
+    def __init__(self, bitmap, batch_size, drone_size, observation_range, amount_of_drones,
                  stigmergy_evaporation_speed, stigmergy_colours, inertia, collision_detection, max_steps,
                  render_allowed=False, drone_colour=[255, 255, 255]):
 
-        self.__init_simulator_parameters(bitmap, batch_size, observation_range, drone_size, amount_of_drones,
+        self.__init_simulator_parameters(bitmap, batch_size, drone_size, observation_range, amount_of_drones,
                                          stigmergy_evaporation_speed, stigmergy_colours, inertia, collision_detection,
                                          max_steps, render_allowed, drone_colour)
 
@@ -31,7 +31,7 @@ class DroneSimulator:
         self.__init_stigmergy_space()
         self.__init_render_parameters()
 
-    def __init_simulator_parameters(self, bitmap, batch_size, observation_range, drone_size, amount_of_drones,
+    def __init_simulator_parameters(self, bitmap, batch_size, drone_size, observation_range, amount_of_drones,
                                     stigmergy_evaporation_speed, stigmergy_colours, inertia, collision_detection,
                                     max_steps, render_allowed, drone_colour):
 
