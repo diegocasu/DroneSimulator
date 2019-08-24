@@ -16,11 +16,11 @@ class DroneSimulator:
 
     def __init__(self, bitmap, batch_size, drone_size, observation_range, amount_of_drones,
                  stigmergy_evaporation_speed, stigmergy_colours, inertia, collision_detection, max_steps,
-                 render_allowed=False, drone_colour=[255, 255, 255]):
+                 rendering_allowed=False, drone_colour=[255, 255, 255]):
 
         self.__init_simulator_parameters(bitmap, batch_size, drone_size, observation_range, amount_of_drones,
                                          stigmergy_evaporation_speed, stigmergy_colours, inertia, collision_detection,
-                                         max_steps, render_allowed, drone_colour)
+                                         max_steps, rendering_allowed, drone_colour)
 
         self.__init_environment_parameters()
         self.__parse_bitmap()
@@ -29,11 +29,11 @@ class DroneSimulator:
         self.__init_drones()
 
         self.__init_stigmergy_space()
-        self.__init_render_parameters()
+        self.__init_rendering_parameters()
 
     def __init_simulator_parameters(self, bitmap, batch_size, drone_size, observation_range, amount_of_drones,
                                     stigmergy_evaporation_speed, stigmergy_colours, inertia, collision_detection,
-                                    max_steps, render_allowed, drone_colour):
+                                    max_steps, rendering_allowed, drone_colour):
 
         self.__bitmap = bitmap
         self.__batch_size = batch_size
@@ -41,18 +41,18 @@ class DroneSimulator:
         self.__drone_size = drone_size
         self.__amount_of_drones = amount_of_drones
 
-        # The values stored in the stigmergy space are int32 to avoid float precision issues.
+        # The values stored in the stigmergy space are int32 to avoid float precision issues
+        # with the evaporation mechanism.
         self.__stigmergy_evaporation_speed = stigmergy_evaporation_speed.astype(int)
         self.__stigmergy_colours = stigmergy_colours
 
         self.__inertia = inertia
         self.__collision_detection = collision_detection
         self.__max_steps = max_steps
-        self.__render_allowed = render_allowed
+        self.__rendering_allowed = rendering_allowed
         self.__drone_colour = drone_colour
 
     def __init_environment_parameters(self):
-        # __environment_bitmap contains the initial bitmap, with all the fixed information (ground, targets, obstacles)
         self.__environment_bitmap = None
         self.__targets = np.array([])
         self.__collision = np.array([])
@@ -63,7 +63,7 @@ class DroneSimulator:
         rgb_bit_array = np.unpackbits(input_array, axis=2)
         # rgb_bit_array is a matrix of pixels, where each cell (each pixel) is a 24-bit array
 
-        env = []
+        collision = []
         no_collision = []
         level_founded = 0
 
@@ -77,7 +77,7 @@ class DroneSimulator:
                     self.__environment_bitmap = np.full((self.__targets.shape[0], self.__targets.shape[1], 3), 0)
                 else:
                     if self.__collision_detection[level_founded - 1]:
-                        env.append(level)
+                        collision.append(level)
                     else:
                         no_collision.append(level)
 
@@ -85,30 +85,31 @@ class DroneSimulator:
                         self.__environment_bitmap[level == 1, :] + self.__get_colour(i))
                 level_founded += 1
 
-        if not env:
-            env = np.zeros((1, self.__targets.shape[0], self.__targets.shape[1]))
+        if not collision:
+            collision = np.zeros((1, self.__targets.shape[0], self.__targets.shape[1]))
         else:
-            env = np.asarray(env)
+            collision = np.asarray(collision)
 
         if not no_collision:
-            self.__no_collision = np.zeros((1, self.__targets.shape[0], self.__targets.shape[1]))
+            no_collision = np.zeros((1, self.__targets.shape[0], self.__targets.shape[1]))
         else:
-            self.__no_collision = np.asarray(no_collision)
+            no_collision = np.asarray(no_collision)
 
-        self.__collision = np.sum(env, axis=0)
+        self.__collision = np.sum(collision, axis=0)
         self.__collision[self.__collision > 0] = 1
+
+        self.__no_collision = np.sum(no_collision, axis=0)
+        self.__no_collision[self.__no_collision > 0] = 1
 
     def __get_colour(self, i):
         colour = np.zeros(shape=3)
-
-        # Inverting the order of bit
         i = 24 - i - 1
 
         colour[2 - i // 8] = 2 ** (i % 8)
         return colour
 
     def __init_drones_parameters(self):
-        self.__drones_position_float = None  # It contains the not approximated position. Not used for drawing
+        self.__drones_position_float = None  # Contains the not approximated position. Not used for drawing
         self.__drones_position = np.full((self.__batch_size, self.__amount_of_drones, 2), -1)
         self.__drones_velocity = np.zeros((self.__batch_size, self.__amount_of_drones, 2))
 
@@ -118,15 +119,6 @@ class DroneSimulator:
         self.__targets_achieved = np.zeros((self.__batch_size, self.__amount_of_drones,
                                             self.__targets.shape[0], self.__targets.shape[1]))
         self.__current_steps = 0
-
-    def __init_stigmergy_space(self):
-        # The values stored in the stigmergy space are int32 to avoid float precision issues
-        # (e.g. zero is not reached when subtracting)
-        self.__stigmergy_space = np.zeros((self.__batch_size,
-                                           self.__stigmergy_evaporation_speed.shape[0],
-                                           self.__targets.shape[0],
-                                           self.__targets.shape[1]),
-                                          int)
 
     def __init_drones(self):
         for batch_index in range(self.__batch_size):
@@ -208,20 +200,28 @@ class DroneSimulator:
 
         return False
 
-    def __init_render_parameters(self):
+    def __init_stigmergy_space(self):
+        # The values stored in the stigmergy space are int32 to avoid float precision issues
+        # (e.g. zero not reached when subtracting)
+        self.__stigmergy_space = np.zeros((self.__batch_size,
+                                           self.__stigmergy_evaporation_speed.shape[0],
+                                           self.__targets.shape[0],
+                                           self.__targets.shape[1]),
+                                          int)
+
+    def __init_rendering_parameters(self):
         self.__image = np.full((self.__targets.shape[0], self.__targets.shape[1], 3), 0)
         self.__image_semaphore = None
 
-        if self.__render_allowed:
+        if self.__rendering_allowed:
             if self.__batch_size > 1:
-                raise Exception("Render is allowed only when batch_size is equal to 1")
+                raise ValueError("Rendering is allowed only when batch_size is equal to 1")
 
             self.__image_semaphore = threading.Lock()
-            rendering = threading.Thread(target=self.__init_render)
+            rendering = threading.Thread(target=self.__init_rendering)
             rendering.start()
 
-    def __init_render(self):
-        self.__image_semaphore.acquire()
+    def __init_rendering(self):
         app = QtGui.QApplication([])
 
         # Create window with GraphicsView widget
@@ -232,24 +232,22 @@ class DroneSimulator:
 
         view = pg.ViewBox()
         view.invertY()
+        view.setAspectLocked(True)
         w.setCentralItem(view)
 
-        # Lock the aspect ratio
-        view.setAspectLocked(True)
-
-        # Create image item
+        self.__image_semaphore.acquire()
         img = pg.ImageItem(self.__image)
         view.addItem(img)
         self.__image_semaphore.release()
 
         timer = QtCore.QTimer()
-        timer.timeout.connect(lambda: self.__update_simulator_view(view))
+        timer.timeout.connect(lambda: self.__update_rendering(view))
         timer.start(100)
 
         # Start Qt event loop unless running in interactive mode or using pyside.
         app.instance().exec()
 
-    def __update_simulator_view(self, view):
+    def __update_rendering(self, view):
         self.__image_semaphore.acquire()
 
         view.clear()
@@ -257,13 +255,6 @@ class DroneSimulator:
         view.addItem(img)
 
         self.__image_semaphore.release()
-
-    def __drones_actions_conversion(self, drones_actions):
-        for index in range(self.__batch_size):
-            np.apply_along_axis(self.__swap_axis, 1, drones_actions[index])
-
-    def __swap_axis(self, action):
-        action[0], action[1] = action[1], action[0]
 
     def __stigmergy_evaporation(self):
         evaporation_levels = np.zeros((self.__stigmergy_evaporation_speed.shape[0],
@@ -369,8 +360,8 @@ class DroneSimulator:
         environment[environment > 1] = 1
 
         if self.__out_of_map(batch_index, drone_index, observation_radius):
-            # Map view enlargement: the drone will see -1 if a space is outside the defined map
-            # The position of the drone is reevaluated according to to the new map dimensions
+            # Map view enlargement: the drone will see -1 if a space is outside the map
+            # The position of the drone is reevaluated according to the new map dimensions
             environment, position_axis_0, position_axis_1 = self.__enlarge_map_view(position_axis_0, position_axis_1,
                                                                                     observation_radius, environment)
 
@@ -415,7 +406,7 @@ class DroneSimulator:
         return info
 
     def render(self):
-        if self.__render_allowed:
+        if self.__rendering_allowed:
             environment = np.copy(self.__environment_bitmap)
             drones = np.sum(self.__drawn_drones[0], axis=0)
             stigmergy_space = self.__stigmergy_space[0]
@@ -446,22 +437,18 @@ class DroneSimulator:
         return observations_table
 
     def step(self, drones_actions, stigmergy_actions):
+        self.__current_steps += 1
+        if self.__current_steps > self.__max_steps:
+            return None, None, True, "Maximum number of steps reached"
+
         observation_dimension = 2*(self.__drone_size + self.__observation_range) + 1
         observations_table = np.zeros((self.__batch_size, self.__amount_of_drones,
                                        observation_dimension, observation_dimension))
 
         rewards_table = np.zeros((self.__batch_size, self.__amount_of_drones, 1))
 
-        self.__current_steps += 1
-        if self.__current_steps > self.__max_steps:
-            return None, 0, True, "Maximum number of steps reached"
-
         self.__stigmergy_evaporation()
         self.__update_stigmergy_space(stigmergy_actions)
-
-        # Using a copy, the conversion doesn't affect the original array of actions
-        drones_actions_copy = np.copy(drones_actions)
-        self.__drones_actions_conversion(drones_actions_copy)
-        self.__update_drones(drones_actions_copy, rewards_table, observations_table)
+        self.__update_drones(drones_actions, rewards_table, observations_table)
 
         return observations_table, rewards_table, False, self.__environment_info()
