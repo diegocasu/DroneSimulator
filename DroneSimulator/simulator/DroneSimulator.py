@@ -321,7 +321,7 @@ class DroneSimulator:
 
     def __reward(self, batch_index, drone_index):
         average_distance = self.__average_distance_to_targets(batch_index, drone_index)
-        alpha = np.sqrt(np.sum(np.power(self.__targets.shape, 2)))
+        alpha = 0.5
         num_target_achieved = np.count_nonzero(self.__targets_achieved[batch_index, drone_index])
 
         reward_score = 1 / average_distance + alpha * num_target_achieved
