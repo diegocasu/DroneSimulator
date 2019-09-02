@@ -18,7 +18,6 @@ drone_simulator = DroneSimulator(
     rendering_allowed = True
 )
 
-shape = (1, 3, 2)
 stig_actions = np.array([[[0,1],[1,2],[2,3]]])
 actions = np.array([[[1,0],[1,0],[1,0]]])
 
