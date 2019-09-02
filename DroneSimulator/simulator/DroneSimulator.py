@@ -412,9 +412,11 @@ class DroneSimulator:
             stigmergy_space = self.__stigmergy_space[0]
 
             environment[drones == 1, :] = environment[drones == 1, :] + self.__drone_colour
+            environment[environment > 255] = environment[environment > 255]//2
 
             for index in range(stigmergy_space.shape[0]):
                 environment[stigmergy_space[index] > 0, :] += self.__stigmergy_colours[index]
+                environment[environment > 255] = environment[environment > 255]//2
 
             self.__image_semaphore.acquire()
             np.copyto(self.__image, environment)
