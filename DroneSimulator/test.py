@@ -10,10 +10,10 @@ drone_simulator = DroneSimulator(
     observation_range = 5,
     drone_size = 0,
     amount_of_drones = 3,
-    stigmergy_evaporation_speed = np.array([0, 0, 0]),
+    stigmergy_evaporation_speed = np.array([10, 20, 30]),
     stigmergy_colours = np.array([[255,64,0],[255,128,0],[255,255,0]]),
     inertia = 0,
-    collision_detection = np.array([True, False]),
+    collision_detection = np.array([True, True]),
     max_steps = 1000,
     rendering_allowed = True
 )
